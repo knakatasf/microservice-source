@@ -1,19 +1,24 @@
 #!/bin/sh
-if [ -z "$DOCKER_ACCOUNT" ]; then
-    DOCKER_ACCOUNT=ewolff
-fi;
-docker build --tag=microservice-kubernetes-demo-apache apache
-docker tag microservice-kubernetes-demo-apache $DOCKER_ACCOUNT/microservice-kubernetes-demo-apache:latest
-docker push $DOCKER_ACCOUNT/microservice-kubernetes-demo-apache
+set -e  # Exit immediately if a command exits with a non-zero status
 
-docker build --tag=microservice-kubernetes-demo-catalog microservice-kubernetes-demo-catalog
-docker tag microservice-kubernetes-demo-catalog $DOCKER_ACCOUNT/microservice-kubernetes-demo-catalog:latest
-docker push $DOCKER_ACCOUNT/microservice-kubernetes-demo-catalog
+echo "Building frontend-service..."
+cd frontend-service
+docker build --no-cache -t frontend-service .
+cd ..
 
-docker build --tag=microservice-kubernetes-demo-customer microservice-kubernetes-demo-customer
-docker tag microservice-kubernetes-demo-customer $DOCKER_ACCOUNT/microservice-kubernetes-demo-customer:latest
-docker push $DOCKER_ACCOUNT/microservice-kubernetes-demo-customer
+echo "Building catalog-service..."
+cd catalog-service
+docker build --no-cache -t catalog-service .
+cd ..
 
-docker build --tag=microservice-kubernetes-demo-order microservice-kubernetes-demo-order
-docker tag microservice-kubernetes-demo-order $DOCKER_ACCOUNT/microservice-kubernetes-demo-order:latest
-docker push $DOCKER_ACCOUNT/microservice-kubernetes-demo-order
+echo "Building customer-service..."
+cd customer-service
+docker build --no-cache -t customer-service .
+cd ..
+
+echo "Building order-service..."
+cd order-service
+docker build --no-cache -t order-service .
+cd ..
+
+echo "✅ All images built successfully!"
