@@ -21,4 +21,6 @@ cd order-service
 docker build --no-cache --platform linux/amd64 -t order-service .
 cd ..
 
+
+
 echo "✅ All images built successfully!"
