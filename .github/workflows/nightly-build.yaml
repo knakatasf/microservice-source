@@ -83,7 +83,7 @@ jobs:
               # read the version from the POM
               VERSION=$(mvn help:evaluate \
               -q -DforceStdout \
-              -f source-repo/$svc/pom.xml \
+              -f $svc/pom.xml \
               -Dexpression=project.version)
               
               # strip off "-SNAPSHOT" if present
