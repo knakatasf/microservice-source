@@ -1,0 +1,117 @@
+name: Nightly Build
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      frontend:  ${{ steps.filter.outputs.frontend }}
+      catalog:   ${{ steps.filter.outputs.catalog }}
+      customer:  ${{ steps.filter.outputs.customer }}
+      order:     ${{ steps.filter.outputs.order }}
+    steps:
+      - name: Checkout source repo
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            frontend:
+              - 'frontend-service/**'
+            catalog:
+              - 'catalog-service/**'
+            customer:
+              - 'customer-service/**'
+            order:
+              - 'order-service/**'
+
+  build:
+    needs: detect
+    runs-on: ubuntu-latest
+    env:
+      AWS_ECR_URL: ${{ secrets.AWS_ECR_URL }}
+      GH_API:      https://api.github.com
+      REPO:        knakatasf/microservice-infra
+    steps:
+      - name: Checkout source repo
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java 11
+        uses: actions/setup-java@v3
+        with:
+          distribution: temurin
+          java-version: '11'
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-region: us-east-1
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token:     ${{ secrets.AWS_SESSION_TOKEN }}
+
+      - name: Login to ECR
+        run: |
+          aws ecr get-login-password --region us-east-1 \
+            | docker login --username AWS --password-stdin $AWS_ECR_URL
+
+      - name: Build and Push changed microservices
+        id: build_push
+        run: |
+          DATE=$(date +%Y%m%d)
+          CHANGED_SVCS=()
+          DEPLOY_ENTRIES=()
+
+          for entry in \
+            "${{ needs.detect.outputs.frontend }}:frontend-service" \
+            "${{ needs.detect.outputs.catalog }}:catalog-service" \
+            "${{ needs.detect.outputs.customer }}:customer-service" \
+            "${{ needs.detect.outputs.order   }}:order-service"
+          do
+            IFS=':' read -r changed svc <<< "$entry"
+            if [[ "$changed" == "true" ]]; then
+              echo "🔨 Detected change in $svc"
+
+              VERSION=$(mvn help:evaluate \
+                -q -DforceStdout \
+                -f $svc/pom.xml \
+                -Dexpression=project.version)
+              QA_TAG="${VERSION}-qa-${DATE}"
+
+              echo "➡️  Building $svc:$QA_TAG"
+              docker build --platform linux/amd64 \
+                -t $AWS_ECR_URL/$svc:$QA_TAG \
+                $svc
+              docker push $AWS_ECR_URL/$svc:$QA_TAG
+
+              CHANGED_SVCS+=("\"$svc\"")
+              DEPLOY_ENTRIES+=("\"$svc\":\"$QA_TAG\"")
+            fi
+          done
+
+          echo "CHANGED_SERVICES=[${CHANGED_SVCS[*]}]" >> $GITHUB_ENV
+          echo "DEPLOYMENTS={${DEPLOY_ENTRIES[*]}}"   >> $GITHUB_ENV
+
+      - name: Dispatch deploy-qa via API
+        run: |
+          curl -X POST \
+            -H "Accept: application/vnd.github.v3+json" \
+            -H "Authorization: token ${{ secrets.ACCESS_TOKEN }}" \
+            $GH_API/repos/$REPO/dispatches \
+            -d @- <<EOF
+          {
+            "event_type": "deploy-qa",
+            "client_payload": {
+              "changed_services":  ${{ env.CHANGED_SERVICES }},
+              "deployments":       ${{ env.DEPLOYMENTS }}
+            }
+          }
+          EOF
