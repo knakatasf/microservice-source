@@ -90,7 +90,7 @@ jobs:
               RELEASE_VERSION=${VERSION%-SNAPSHOT}
               
               # build the QA tag
-              QA_TAG="${RELEASE_VERSION}-qa-${DATE}"
+              QA_TAG="v${RELEASE_VERSION}-qa-${DATE}"
 
               echo "➡️  Building $svc:$QA_TAG"
               docker build --platform linux/amd64 \
