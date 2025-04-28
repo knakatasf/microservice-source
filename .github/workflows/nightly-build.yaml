@@ -80,11 +80,17 @@ jobs:
             if [[ "$changed" == "true" ]]; then
               echo "🔨 Detected change in $svc"
 
+              # read the version from the POM
               VERSION=$(mvn help:evaluate \
-                -q -DforceStdout \
-                -f $svc/pom.xml \
-                -Dexpression=project.version)
-              QA_TAG="${VERSION}-qa-${DATE}"
+              -q -DforceStdout \
+              -f source-repo/$svc/pom.xml \
+              -Dexpression=project.version)
+              
+              # strip off "-SNAPSHOT" if present
+              RELEASE_VERSION=${VERSION%-SNAPSHOT}
+              
+              # build the QA tag
+              QA_TAG="${RELEASE_VERSION}-qa-${DATE}"
 
               echo "➡️  Building $svc:$QA_TAG"
               docker build --platform linux/amd64 \
